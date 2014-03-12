@@ -3,17 +3,23 @@ adapted from Marlow's _Parallel and Concurrent Programming in Haskell_:
 
 > module Algorithms.Lloyd.Sequential where
 > 
-> import Data.Monoid (Monoid(..))
+> import Prelude hiding (zipWith, map, foldr1, replicate)
+> import Control.Monad (guard, forM_)
 > import Data.Function (on)
 > import Data.List (minimumBy)
-> import Data.Vector (Vector(..), toList, create)
-> import Control.Monad (guard, forM_)
+> import Data.Semigroup (Semigroup(..))
+> import Data.Vector (Vector(..), toList, create, zipWith, map, foldr1, empty, replicate)
 > import qualified Data.Vector.Mutable as MV (replicate, read, write)
  
-A data point is represented by two real coordinates; despite that Lloyd's
-algorithm is generalisable to an arbitrary number of dimensions:
+A data point is represented by an n-dimensional real vector:
 
-> data Point = Point Double Double deriving (Eq, Show)
+> data Point = Point (Vector Double) deriving (Eq, Show)
+
+Point isn't parametrised, so we can't define a functor (or any functor-family)
+instances. Instead, we define a specialised map, `pmap`:
+
+> pmap :: (Double -> Double) -> Point -> Point
+> pmap f (Point vector) = Point $ map f vector
  
 The `Metric` typeclass, as defined here, is intended to contain types that
 admit metrics (i.e. are metric spaces.) Instances can be defined in terms of 
@@ -31,14 +37,12 @@ square root of this value, but as we're only interested in comparing distances,
 we omit that function for efficiency:
 
 > instance Metric Point where
->   Point x1 y1 <-> Point x2 y2 = (x2-x1)**2 + (y2-y1)**2
+>   Point v0 <-> Point v1 = foldr1 (+) . map (**2) $ zipWith (-) v0 v1
  
-`Point`s may be combined by summing their coordinates, in this case the origin
-is identity:
+`Point`s may be combined using simple vector addition:
 
-> instance Monoid Point where
->   Point x0 y0 `mappend` Point x1 y1 = Point (x0+x1) (y0+y1)
->   mempty = Point 0 0 
+> instance Semigroup Point where
+>   Point v0 <> Point v1 = Point $ zipWith (+) v0 v1
 
 Clusters are represented by an identifier and a centroid:
 
@@ -54,34 +58,40 @@ Clusters are treated as equivalent if they share a centroid:
 
 `PointSum` is a point sum; this is an intermediate type used to contain the sum
 of points in a set when constructing new clusters. It consists of a count of
-included points, as well as the sum of their x and y coordinates:
+included points, as well as the vector sum of the constituent points:
 
-> data PointSum = PointSum Int Double Double deriving (Show)
+> data PointSum = PointSum Int Point deriving (Show)
 
-Two `PointSum`s can be combined by summing corresponding values; the `PointSum`
-representing the sum of no points is identity:
+Two `PointSum`s can be combined by summing corresponding values:
 
-> instance Monoid PointSum where
->   PointSum c0 x0 y0 `mappend` PointSum c1 x1 y1 = PointSum (c0+c1) (x0+x1) (y0+y1)
->   mempty = PointSum 0 0 0 
+> instance Semigroup PointSum where
+>   PointSum c0 p0 <> PointSum c1 p1 = PointSum (c0+c1) (p0<>p1)
+
+Without dependent types, we can't define a valid Monoid instance for PointSum,
+as the identity varies with the dimensions of the point vector. But we can
+construct one at runtime:
+
+> emptyPointSum :: Int -> PointSum
+> emptyPointSum length = PointSum 0 . Point $ replicate length 0
 
 A point sum is constructed by incrementally adding points likeso:
 
 > addPoint :: PointSum -> Point -> PointSum
-> addPoint (PointSum cn xs ys) (Point x y) = PointSum (succ cn) (xs + x) (ys + y)
+> addPoint sum point = sum <> pure point
+>   where pure = PointSum 1 
 
 A point sum can be turned into a cluster by computing its centroid, the average
 of all points associated with the cluster:
 
 > toCluster :: Int -> PointSum -> Cluster
-> toCluster cid (PointSum count xs ys) = Cluster
+> toCluster cid (PointSum count point) = Cluster
 >   { identifier = cid
->   , centroid   = Point (xs // count) (ys // count)
+>   , centroid   = pmap (//count) point
 >   }
 >
 > (//) :: Double -> Int -> Double
 > x // y = x / fromIntegral y
- 
+         
 After each iteration, points are associated with the cluster having the nearest
 centroid:
 
@@ -90,45 +100,44 @@ centroid:
 >   cluster <- clusters
 >   return (cluster, point <-> centroid cluster)
 >
-> assign :: Int -> [Cluster] -> [Point] -> Vector PointSum
-> assign nclusters clusters points = create $ do
->   vector <- MV.replicate nclusters mempty
+> assign :: [Cluster] -> [Point] -> Vector PointSum
+> assign clusters points = let nc = length clusters in create $ do
+>   vector <- MV.replicate nc $ emptyPointSum nc
 >   points `forM_` \point -> do
 >     let cluster  = closestCluster clusters point 
 >         position = identifier cluster
->     pointsum <- MV.read vector position
->     MV.write vector position $! addPoint pointsum point
+>     sum <- MV.read vector position
+>     MV.write vector position $! addPoint sum point
 >   return vector
-
+>
 > makeNewClusters :: Vector PointSum -> [Cluster]
 > makeNewClusters vector = do
->   (pointSum@(PointSum count _ _), index) <- zip (toList vector) [0..]
+>   (pointSum@(PointSum count _), index) <- zip (toList vector) [0..]
 >   guard $ count > 0 -- We don't want an empty PointSum: amongst other 
 >                     -- things, this'd lead to division by zero when 
 >                     -- computing the centroid.
 >   return $ toCluster index pointSum
 >
-> step :: Int -> [Cluster] -> [Point] -> [Cluster]
-> step = makeNewClusters ...: assign
+> step :: [Cluster] -> [Point] -> [Cluster]
+> step = makeNewClusters ..: assign
 >
-> (...:) :: (Functor f, Functor g, Functor h) => (a -> b) -> f(g(h a)) -> f(g(h b))
-> (...:) = fmap . fmap . fmap
+> (..:) :: (Functor f, Functor g) => (a -> b) -> f (g a) -> f (g b)
+> (..:) = fmap . fmap
 
 The algorithm consists of iteratively finding the centroid of each existing
 cluster, then reallocating points according to which centroid is closest, until
 convergence. As the algorithm isn't guaranteed to converge, we cut execution if
 convergence hasn't been observed after eighty iterations:
 
-> kmeans :: Int -> [Point] -> [Cluster] -> [Cluster]
+> kmeans :: [Point] -> [Cluster] -> [Cluster]
 > kmeans = kmeans' 0
 >
-> kmeans' :: Int -> Int -> [Point] -> [Cluster] -> [Cluster]
-> kmeans' iterations nclusters points clusters 
+> kmeans' :: Int -> [Point] -> [Cluster] -> [Cluster]
+> kmeans' iterations points clusters 
 >   | iterations >= expectDivergent = clusters
 >   | clusters' == clusters         = clusters 
->   | otherwise                     = kmeans' (succ iterations) nclusters points clusters'
->   where clusters' = step nclusters clusters points
->
+>   | otherwise                     = kmeans' (succ iterations) points clusters'
+>   where clusters' = step clusters points
 >
 > expectDivergent :: Int
 > expectDivergent = 80

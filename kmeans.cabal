@@ -11,7 +11,7 @@ cabal-version:       >=1.10
 
 library
   exposed-modules:     Algorithms.Lloyd.Sequential
-  build-depends:       base, vector
+  build-depends:       base, vector, semigroups
   hs-source-dirs:      src
   default-language:    Haskell2010
 
@@ -19,5 +19,5 @@ benchmark kmeans-benchmark
   type:             exitcode-stdio-1.0
   main-is:          Main.lhs
   hs-source-dirs:   benchmark
-  build-depends:    base, random, criterion, normaldistribution, kmeans, deepseq
+  build-depends:    base, random, criterion, normaldistribution, kmeans, deepseq, vector
   default-language: Haskell2010

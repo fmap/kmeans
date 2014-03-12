@@ -4,3 +4,5 @@ dist/
 *.hi
 *.o
 *.sw*
+*.p_hi
+*.p_o
