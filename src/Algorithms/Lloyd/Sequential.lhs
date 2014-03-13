@@ -123,6 +123,8 @@ centroid:
 >
 > (..:) :: (Functor f, Functor g) => (a -> b) -> f (g a) -> f (g b)
 > (..:) = fmap . fmap
+> 
+> infixr 8 ..:
 
 The algorithm consists of iteratively finding the centroid of each existing
 cluster, then reallocating points according to which centroid is closest, until
