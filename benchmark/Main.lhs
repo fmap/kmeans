@@ -3,6 +3,7 @@ We aim to benchmark each implementation of Lloyd's algorithm:
 > import Algorithms.Lloyd.Sequential (Point(..), Cluster(..))
 > import qualified Algorithms.Lloyd.Sequential as Sequential (kmeans)
 > import qualified Algorithms.Lloyd.Strategies as Strategies (kmeans)
+> import Data.Metric (Metric(..), Euclidean(..))
 > import Data.Random.Normal (mkNormals)
 > import Data.Vector (fromList)
 > import Control.Monad (forM)
@@ -34,6 +35,6 @@ Together the subject of our benchmarks:
  
 > main :: IO ()
 > main = defaultMain
->   [ bench "Sequential" $ nf (Sequential.kmeans points) clusters
->   , bench "Strategies" $ nf (Strategies.kmeans 64 points) clusters
+>   [ bench "Sequential" $ nf (Sequential.kmeans Euclidean points) clusters
+>   , bench "Strategies" $ nf (Strategies.kmeans Euclidean 64 points) clusters
 >   ] 

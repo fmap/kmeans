@@ -1,3 +1,5 @@
+> {-# LANGUAGE ViewPatterns #-}
+
 A sequential implementation of Lloyd's algorithm for k-means clustering,
 adapted from Marlow's _Parallel and Concurrent Programming in Haskell_:
 
@@ -6,43 +8,38 @@ adapted from Marlow's _Parallel and Concurrent Programming in Haskell_:
 > import Prelude hiding (zipWith, map, foldr1, replicate)
 > import Control.Monad (guard, forM_)
 > import Data.Function (on)
+> import Data.Functor.Extras ((..:),(...:))
 > import Data.List (minimumBy)
+> import Data.Metric (Metric(..))
 > import Data.Semigroup (Semigroup(..))
 > import Data.Vector (Vector(..), toList, create, zipWith, map, foldr1, empty, replicate)
 > import qualified Data.Vector.Mutable as MV (replicate, read, write)
  
 A data point is represented by an n-dimensional real vector:
 
-> data Point = Point (Vector Double) deriving (Eq, Show)
+> data Point = Point 
+>   { point :: Vector Double
+>   } deriving (Eq, Show)
 
 Point isn't parametrised, so we can't define a functor (or any functor-family)
 instances. Instead, we define a specialised map, `pmap`:
 
 > pmap :: (Double -> Double) -> Point -> Point
-> pmap f (Point vector) = Point $ map f vector
- 
-The `Metric` typeclass, as defined here, is intended to contain types that
-admit metrics (i.e. are metric spaces.) Instances can be defined in terms of 
-`distance` or the infix `<->`:
+> pmap f = Point . map f . point
 
-> class Metric a where
->   distance :: a -> a -> Double
->   distance = (<->)
->   (<->) :: a -> a -> Double
->   (<->) = distance
+To define distance between data-points, we admit arbitrary metric spaces
+over real vectors; **However:** it should be noted that convergence is
+only guaranteed in the case when the mean of the metric optimises the
+same criterion as minimum-distance assignment (`assign` below.) For this
+reason, Euclidean-distance is popularly used for mean assignment.
 
-We define distance between data-points as the sum of squares of differences of
-corresponding coordinates. The actual (Euclidean) distance is given by the
-square root of this value, but as we're only interested in comparing distances,
-we omit that function for efficiency:
-
-> instance Metric Point where
->   Point v0 <-> Point v1 = foldr1 (+) . map (**2) $ zipWith (-) v0 v1
+> useMetric :: Metric a => (Vector Double -> a) -> Point -> Point -> Double
+> useMetric metric = distance `on` (metric . point)
  
 `Point`s may be combined using simple vector addition:
 
 > instance Semigroup Point where
->   Point v0 <> Point v1 = Point $ zipWith (+) v0 v1
+>   (<>) = Point ..: zipWith (+) `on` point
 
 Clusters are represented by an identifier and a centroid:
 
@@ -54,7 +51,7 @@ Clusters are represented by an identifier and a centroid:
 Clusters are treated as equivalent if they share a centroid:
 
 > instance Eq Cluster where
->   (Cluster _ c) == (Cluster _ d) = c == d
+>   (==) = (==) `on` centroid
 
 `PointSum` is a point sum; this is an intermediate type used to contain the sum
 of points in a set when constructing new clusters. It consists of a count of
@@ -86,7 +83,7 @@ of all points associated with the cluster:
 > toCluster :: Int -> PointSum -> Cluster
 > toCluster cid (PointSum count point) = Cluster
 >   { identifier = cid
->   , centroid   = pmap (//count) point
+>   , centroid   = pmap (// count) point
 >   }
 >
 > (//) :: Double -> Int -> Double
@@ -95,16 +92,16 @@ of all points associated with the cluster:
 After each iteration, points are associated with the cluster having the nearest
 centroid:
 
-> closestCluster :: [Cluster] -> Point -> Cluster
-> closestCluster clusters point = fst . minimumBy (compare `on` snd) $ do
+> closestCluster :: Metric a => (Vector Double -> a) -> [Cluster] -> Point -> Cluster
+> closestCluster (useMetric -> d) clusters point = fst . minimumBy (compare `on` snd) $ do
 >   cluster <- clusters
->   return (cluster, point <-> centroid cluster)
+>   return (cluster, point `d` centroid cluster)
 >
-> assign :: [Cluster] -> [Point] -> Vector PointSum
-> assign clusters points = let nc = length clusters in create $ do
+> assign :: Metric a => (Vector Double -> a) -> [Cluster] -> [Point] -> Vector PointSum
+> assign metric clusters points = let nc = length clusters in create $ do
 >   vector <- MV.replicate nc $ emptyPointSum nc
 >   points `forM_` \point -> do
->     let cluster  = closestCluster clusters point 
+>     let cluster  = closestCluster metric clusters point 
 >         position = identifier cluster
 >     sum <- MV.read vector position
 >     MV.write vector position $! addPoint sum point
@@ -118,28 +115,24 @@ centroid:
 >                     -- computing the centroid.
 >   return $ toCluster index pointSum
 >
-> step :: [Cluster] -> [Point] -> [Cluster]
-> step = makeNewClusters ..: assign
+> step :: Metric a => (Vector Double -> a) -> [Cluster] -> [Point] -> [Cluster]
+> step = makeNewClusters ...: assign
 >
-> (..:) :: (Functor f, Functor g) => (a -> b) -> f (g a) -> f (g b)
-> (..:) = fmap . fmap
-> 
-> infixr 8 ..:
 
 The algorithm consists of iteratively finding the centroid of each existing
 cluster, then reallocating points according to which centroid is closest, until
 convergence. As the algorithm isn't guaranteed to converge, we cut execution if
 convergence hasn't been observed after eighty iterations:
 
-> kmeans :: [Point] -> [Cluster] -> [Cluster]
-> kmeans = kmeans' 0
+> kmeans :: Metric a => (Vector Double -> a) -> [Point] -> [Cluster] -> [Cluster]
+> kmeans = flip kmeans' 0 
 >
-> kmeans' :: Int -> [Point] -> [Cluster] -> [Cluster]
-> kmeans' iterations points clusters 
+> kmeans' :: Metric a => (Vector Double -> a) -> Int -> [Point] -> [Cluster] -> [Cluster]
+> kmeans' metric iterations points clusters 
 >   | iterations >= expectDivergent = clusters
 >   | clusters' == clusters         = clusters 
->   | otherwise                     = kmeans' (succ iterations) points clusters'
->   where clusters' = step clusters points
+>   | otherwise                     = kmeans' metric (succ iterations) points clusters'
+>   where clusters' = step metric clusters points
 >
 > expectDivergent :: Int
 > expectDivergent = 80
