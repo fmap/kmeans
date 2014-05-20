@@ -12,7 +12,7 @@ points to clusters:
 > import Data.Metric (Metric(..))
 > import Data.Semigroup (Semigroup(..))
 > import Data.Vector (Vector(..), zipWith)
-> import Algorithms.Lloyd.Sequential (Cluster(..), Point(..), PointSum(..), makeNewClusters, assign, expectDivergent)
+> import Algorithms.Lloyd.Sequential (Cluster(..), Point(..), PointSum(..), makeNewClusters, assign)
 
 We can combine two vectors of some same type $t$ provided we know how to
 combine two $t$s:
@@ -38,12 +38,12 @@ recombination may exceed the speed-up provided by parallellism; if there
 are too few items, and those items vary in cost, some of our cores may
 be unused for part of the computation.
 
-> kmeans :: Metric a => (Vector Double -> a) -> Int -> [Point b] -> [Cluster] -> [Cluster]
-> kmeans metric = kmeans' metric 0  ..: chunksOf
+> kmeans :: Metric a => Int -> (Vector Double -> a) -> Int -> [Point b] -> [Cluster] -> [Cluster]
+> kmeans expectDivergent metric = kmeans' expectDivergent metric 0  ..: chunksOf
 >
-> kmeans' :: Metric a => (Vector Double -> a) -> Int -> [[Point b]] -> [Cluster] -> [Cluster]
-> kmeans' metric iterations points clusters 
+> kmeans' :: Metric a => Int -> (Vector Double -> a) -> Int -> [[Point b]] -> [Cluster] -> [Cluster]
+> kmeans' expectDivergent metric iterations points clusters 
 >   | iterations >= expectDivergent = clusters
 >   | clusters' == clusters         = clusters 
->   | otherwise                     = kmeans' metric (succ iterations) points clusters'
+>   | otherwise                     = kmeans' expectDivergent metric (succ iterations) points clusters'
 >   where clusters' = step metric clusters points

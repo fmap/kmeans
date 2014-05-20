@@ -119,18 +119,15 @@ cluster, then reallocating points according to which centroid is closest, until
 convergence. As the algorithm isn't guaranteed to converge, we cut execution if
 convergence hasn't been observed after eighty iterations:
 
-> kmeans :: Metric a => (Vector Double -> a) -> [Point b] -> [Cluster] -> [Cluster]
-> kmeans = flip kmeans' 0 
+> kmeans :: Metric a => Int -> (Vector Double -> a) -> [Point b] -> [Cluster] -> [Cluster]
+> kmeans expectDivergent metric = kmeans' expectDivergent metric 0 
 >
-> kmeans' :: Metric a => (Vector Double -> a) -> Int -> [Point b] -> [Cluster] -> [Cluster]
-> kmeans' metric iterations points clusters 
+> kmeans' :: Metric a => Int -> (Vector Double -> a) -> Int -> [Point b] -> [Cluster] -> [Cluster]
+> kmeans' expectDivergent metric iterations points clusters 
 >   | iterations >= expectDivergent = clusters
 >   | clusters' == clusters         = clusters 
->   | otherwise                     = kmeans' metric (succ iterations) points clusters'
+>   | otherwise                     = kmeans' expectDivergent metric (succ iterations) points clusters'
 >   where clusters' = step metric clusters points
->
-> expectDivergent :: Int
-> expectDivergent = 80
 
 A note on initialisation: typically clusters are randomly assigned to data
 points prior to the first update step.

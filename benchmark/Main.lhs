@@ -35,6 +35,6 @@ Together the subject of our benchmarks:
  
 > main :: IO ()
 > main = defaultMain
->   [ bench "Sequential" $ nf (Sequential.kmeans Euclidean points) clusters
->   , bench "Strategies" $ nf (Strategies.kmeans Euclidean 64 points) clusters
+>   [ bench "Sequential" $ nf (Sequential.kmeans 80 Euclidean points) clusters
+>   , bench "Strategies" $ nf (Strategies.kmeans 80 Euclidean 64 points) clusters
 >   ] 
