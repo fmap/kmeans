@@ -15,17 +15,19 @@ adapted from Marlow's _Parallel and Concurrent Programming in Haskell_:
 > import Data.Vector (Vector(..), toList, create, zipWith, map, foldr1, empty, replicate)
 > import qualified Data.Vector.Mutable as MV (replicate, read, write)
  
-A data point is represented by an n-dimensional real vector:
+A data point is comprised of an n-dimensional real vector, and an
+associated value:
 
-> data Point = Point 
+> data Point a = Point 
 >   { point :: Vector Double
->   } deriving (Eq, Show)
+>   , value :: a
+>   } 
 
-Point isn't parametrised, so we can't define a functor (or any functor-family)
-instances. Instead, we define a specialised map, `pmap`:
+Two data-points are defined as equivalent if they've a point vector in
+common:
 
-> pmap :: (Double -> Double) -> Point -> Point
-> pmap f = Point . map f . point
+> instance Eq (Point a) where
+>   (==) = (==) `on` point
 
 To define distance between data-points, we admit arbitrary metric spaces
 over real vectors; **However:** it should be noted that convergence is
@@ -33,19 +35,14 @@ only guaranteed in the case when the mean of the metric optimises the
 same criterion as minimum-distance assignment (`assign` below.) For this
 reason, Euclidean-distance is popularly used for mean assignment.
 
-> useMetric :: Metric a => (Vector Double -> a) -> Point -> Point -> Double
-> useMetric metric = distance `on` (metric . point)
- 
-`Point`s may be combined using simple vector addition:
-
-> instance Semigroup Point where
->   (<>) = Point ..: zipWith (+) `on` point
+> useMetric :: Metric a => (Vector Double -> a) -> Vector Double -> Vector Double -> Double
+> useMetric = on distance
 
 Clusters are represented by an identifier and a centroid:
 
 > data Cluster = Cluster
 >   { identifier :: Int
->   , centroid   :: Point
+>   , centroid   :: Vector Double
 >   } deriving (Show)
 
 Clusters are treated as equivalent if they share a centroid:
@@ -57,47 +54,46 @@ Clusters are treated as equivalent if they share a centroid:
 of points in a set when constructing new clusters. It consists of a count of
 included points, as well as the vector sum of the constituent points:
 
-> data PointSum = PointSum Int Point deriving (Show)
+> data PointSum = PointSum Int (Vector Double) deriving (Show)
 
 Two `PointSum`s can be combined by summing corresponding values:
 
 > instance Semigroup PointSum where
->   PointSum c0 p0 <> PointSum c1 p1 = PointSum (c0+c1) (p0<>p1)
+>   PointSum c0 p0 <> PointSum c1 p1 = PointSum (c0+c1) (zipWith (+) p0 p1)
 
 Without dependent types, we can't define a valid Monoid instance for PointSum,
 as the identity varies with the dimensions of the point vector. But we can
 construct one at runtime:
 
 > emptyPointSum :: Int -> PointSum
-> emptyPointSum length = PointSum 0 . Point $ replicate length 0
+> emptyPointSum length = PointSum 0 $ replicate length 0
 
 A point sum is constructed by incrementally adding points likeso:
 
-> addPoint :: PointSum -> Point -> PointSum
-> addPoint sum point = sum <> pure point
->   where pure = PointSum 1 
+> addPoint :: PointSum -> Point a -> PointSum
+> addPoint sum = (sum <>) . PointSum 1 . point
 
 A point sum can be turned into a cluster by computing its centroid, the average
 of all points associated with the cluster:
 
 > toCluster :: Int -> PointSum -> Cluster
-> toCluster cid (PointSum count point) = Cluster
+> toCluster cid (PointSum count vector) = Cluster
 >   { identifier = cid
->   , centroid   = pmap (// count) point
+>   , centroid   = map (//count) vector
 >   }
 >
 > (//) :: Double -> Int -> Double
 > x // y = x / fromIntegral y
-         
+           
 After each iteration, points are associated with the cluster having the nearest
 centroid:
 
-> closestCluster :: Metric a => (Vector Double -> a) -> [Cluster] -> Point -> Cluster
-> closestCluster (useMetric -> d) clusters point = fst . minimumBy (compare `on` snd) $ do
+> closestCluster :: Metric a => (Vector Double -> a) -> [Cluster] -> Point b -> Cluster
+> closestCluster (useMetric -> d) clusters (point->point) = fst . minimumBy (compare `on` snd) $ do
 >   cluster <- clusters
 >   return (cluster, point `d` centroid cluster)
 >
-> assign :: Metric a => (Vector Double -> a) -> [Cluster] -> [Point] -> Vector PointSum
+> assign :: Metric a => (Vector Double -> a) -> [Cluster] -> [Point b] -> Vector PointSum
 > assign metric clusters points = let nc = length clusters in create $ do
 >   vector <- MV.replicate nc $ emptyPointSum nc
 >   points `forM_` \point -> do
@@ -115,19 +111,18 @@ centroid:
 >                     -- computing the centroid.
 >   return $ toCluster index pointSum
 >
-> step :: Metric a => (Vector Double -> a) -> [Cluster] -> [Point] -> [Cluster]
+> step :: Metric a => (Vector Double -> a) -> [Cluster] -> [Point b] -> [Cluster]
 > step = makeNewClusters ...: assign
->
 
 The algorithm consists of iteratively finding the centroid of each existing
 cluster, then reallocating points according to which centroid is closest, until
 convergence. As the algorithm isn't guaranteed to converge, we cut execution if
 convergence hasn't been observed after eighty iterations:
 
-> kmeans :: Metric a => (Vector Double -> a) -> [Point] -> [Cluster] -> [Cluster]
+> kmeans :: Metric a => (Vector Double -> a) -> [Point b] -> [Cluster] -> [Cluster]
 > kmeans = flip kmeans' 0 
 >
-> kmeans' :: Metric a => (Vector Double -> a) -> Int -> [Point] -> [Cluster] -> [Cluster]
+> kmeans' :: Metric a => (Vector Double -> a) -> Int -> [Point b] -> [Cluster] -> [Cluster]
 > kmeans' metric iterations points clusters 
 >   | iterations >= expectDivergent = clusters
 >   | clusters' == clusters         = clusters 
