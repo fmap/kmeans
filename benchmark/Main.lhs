@@ -12,15 +12,15 @@ We aim to benchmark each implementation of Lloyd's algorithm:
 
 We draw 2e3 normally distributed 2D points:
 
-> points :: [Point Int]
-> points = [Point (vector n) n | n <- [1..2000-1]]
->   where vector n = fromList [normals!!n, normals!!n*2]
->         normals  = mkNormals 0x29a
+> points :: [Point]
+> points = concat $ [0..2000-1] `forM` \n -> do
+>   return . Point . fromList $ [normals!!n, normals!!(n*2)]
+>   where normals = take 4000 $ mkNormals 0x29a
 
 Three of which form the centroids of our initial clusters:
  
 > clusters :: [Cluster]
-> clusters = take 3 . map (uncurry Cluster) $ zip [0..] (map point points)
+> clusters = map (uncurry Cluster) $ zip [0..] (take 3 points)
 
 To correctly benchmark the result of a pure function, we need to be able to
 evaluate it to normal form:
@@ -28,8 +28,8 @@ evaluate it to normal form:
 > instance NFData Cluster where
 >   rnf (Cluster i c) = rnf i `seq` rnf c
 >
-> instance NFData a => NFData (Point a) where
->   rnf (Point a b) = rnf a `seq` rnf b
+> instance NFData Point where
+>   rnf (Point v) = rnf v
  
 Together the subject of our benchmarks:
  

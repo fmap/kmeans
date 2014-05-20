@@ -23,7 +23,7 @@ combine two $t$s:
 Step is modified to, given a partitioned list of points, perform
 classification in parallel:
 
-> step :: Metric a => (Vector Double -> a) -> [Cluster] -> [[Point b]] -> [Cluster]
+> step :: Metric a => (Vector Double -> a) -> [Cluster] -> [[Point]] -> [Cluster]
 > step = makeNewClusters . foldr1 (<>) . with (parTraversable rseq) ..: map ..: assign 
 >
 > with :: Strategy a -> a -> a
@@ -38,10 +38,10 @@ recombination may exceed the speed-up provided by parallellism; if there
 are too few items, and those items vary in cost, some of our cores may
 be unused for part of the computation.
 
-> kmeans :: Metric a => Int -> (Vector Double -> a) -> Int -> [Point b] -> [Cluster] -> [Cluster]
+> kmeans :: Metric a => Int -> (Vector Double -> a) -> Int -> [Point] -> [Cluster] -> [Cluster]
 > kmeans expectDivergent metric = kmeans' expectDivergent metric 0  ..: chunksOf
 >
-> kmeans' :: Metric a => Int -> (Vector Double -> a) -> Int -> [[Point b]] -> [Cluster] -> [Cluster]
+> kmeans' :: Metric a => Int -> (Vector Double -> a) -> Int -> [[Point]] -> [Cluster] -> [Cluster]
 > kmeans' expectDivergent metric iterations points clusters 
 >   | iterations >= expectDivergent = clusters
 >   | clusters' == clusters         = clusters 
