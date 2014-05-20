@@ -5,14 +5,13 @@ points to clusters:
 
 > module Algorithms.Lloyd.Strategies where
 >
-> import Prelude hiding (zipWith, map, foldr1)
+> import Prelude hiding (zipWith)
 > import Control.Parallel.Strategies (Strategy(..), parTraversable, using, rseq)
-> import Data.Foldable (Foldable(foldr1))
 > import Data.Functor.Extras ((..:))
+> import Data.List.Split (chunksOf)
 > import Data.Metric (Metric(..))
 > import Data.Semigroup (Semigroup(..))
-> import Data.Vector (Vector(..), zipWith, map)
-> import Data.Vector.Split (chunksOf)
+> import Data.Vector (Vector(..), zipWith)
 > import Algorithms.Lloyd.Sequential (Cluster(..), Point(..), PointSum(..), makeNewClusters, assign, expectDivergent)
 
 We can combine two vectors of some same type $t$ provided we know how to
@@ -24,7 +23,7 @@ combine two $t$s:
 Step is modified to, given a partitioned list of points, perform
 classification in parallel:
 
-> step :: Metric a => (Vector Double -> a) -> Vector Cluster -> Vector (Vector Point) -> Vector Cluster
+> step :: Metric a => (Vector Double -> a) -> [Cluster] -> [[Point]] -> [Cluster]
 > step = makeNewClusters . foldr1 (<>) . with (parTraversable rseq) ..: map ..: assign 
 >
 > with :: Strategy a -> a -> a
@@ -39,10 +38,10 @@ recombination may exceed the speed-up provided by parallellism; if there
 are too few items, and those items vary in cost, some of our cores may
 be unused for part of the computation.
 
-> kmeans :: Metric a => (Vector Double -> a) -> Int -> Vector Point -> Vector Cluster -> Vector Cluster
+> kmeans :: Metric a => (Vector Double -> a) -> Int -> [Point] -> [Cluster] -> [Cluster]
 > kmeans metric = kmeans' metric 0  ..: chunksOf
 >
-> kmeans' :: Metric a => (Vector Double -> a) -> Int -> Vector (Vector Point) -> Vector Cluster -> Vector Cluster
+> kmeans' :: Metric a => (Vector Double -> a) -> Int -> [[Point]] -> [Cluster] -> [Cluster]
 > kmeans' metric iterations points clusters 
 >   | iterations >= expectDivergent = clusters
 >   | clusters' == clusters         = clusters 
