@@ -54,5 +54,5 @@ be unused for part of the computation.
 >   where clusters' = step metric clusters points
 >
 > kmeans :: Metric a => Int -> (Vector Double -> a) -> Int -> Vector Point -> Vector Cluster -> Vector (Vector Point)
-> kmeans expectDivergent metric iterations points initial = assign metric clusters points
->   where clusters = computeClusters 80 metric iterations points initial
+> kmeans expectDivergent metric chunks points initial = assign metric clusters points
+>   where clusters = computeClusters expectDivergent metric chunks points initial
