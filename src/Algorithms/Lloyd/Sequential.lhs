@@ -102,7 +102,7 @@ centroid:
 >
 > assign :: Metric a => (Vector Double -> a) -> Vector Cluster -> Vector Point -> Vector (Vector Point)
 > assign metric clusters points = let nc = length clusters in create $ do
->   vector <- MV.replicate (nc+1) empty
+>   vector <- MV.replicate nc empty
 >   points `forM_` \point -> do
 >     let cluster  = closestCluster metric clusters point
 >         position = identifier cluster
