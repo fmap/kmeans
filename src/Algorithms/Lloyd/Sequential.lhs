@@ -3,7 +3,15 @@
 A sequential implementation of Lloyd's algorithm for k-means clustering,
 adapted from Marlow's _Parallel and Concurrent Programming in Haskell_:
 
-> module Algorithms.Lloyd.Sequential where
+> module Algorithms.Lloyd.Sequential (
+>   Point(..),
+>   Cluster(..), 
+>   kmeans,
+>   PointSum(..),
+>   makeNewClusters,
+>   assign,
+>   assignPS
+> )where
 > 
 > import Prelude hiding (zipWith, map, foldr, replicate, length, zip, head)
 > import Control.Applicative ((<$>))

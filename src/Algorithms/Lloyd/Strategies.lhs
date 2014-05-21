@@ -3,7 +3,11 @@ adapted from Marlow's _Parallel and Concurrent Programming in Haskell_.
 Here we use Evaluation Strategies to parallelise the assignment of
 points to clusters:
 
-> module Algorithms.Lloyd.Strategies where
+> module Algorithms.Lloyd.Strategies (
+>   Point(..),
+>   Cluster(..), 
+>   kmeans
+> ) where
 >
 > import Prelude hiding (zipWith, foldr1, map)
 > import Control.Parallel.Strategies (Strategy(..), parTraversable, using, rseq)
