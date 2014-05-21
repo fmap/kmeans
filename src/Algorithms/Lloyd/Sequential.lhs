@@ -5,17 +5,15 @@ adapted from Marlow's _Parallel and Concurrent Programming in Haskell_:
 
 > module Algorithms.Lloyd.Sequential where
 > 
-> import Prelude hiding (zipWith, map, foldr, replicate)
+> import Prelude hiding (zipWith, map, foldr, replicate, length, zip, head)
 > import Control.Applicative ((<$>))
-> import Control.Monad (guard, forM_)
+> import Control.Monad (guard)
 > import Data.Foldable (Foldable(foldr))
 > import Data.Function (on)
 > import Data.Functor.Extras ((..:),(...:))
-> import Data.List (minimumBy)
 > import Data.Metric (Metric(..))
 > import Data.Semigroup (Semigroup(..))
-> import Data.Vector (Vector(..), toList, create, zipWith, map, empty, replicate, cons)
-> import qualified Data.Vector as V (length)
+> import Data.Vector (Vector(..), toList, fromList, create, zip, zipWith, map, empty, replicate, cons, minimumBy, length, head, forM_)
 > import qualified Data.Vector.Mutable as MV (replicate, read, write)
  
 A data point is represented by an n-dimensional real vector:
@@ -27,8 +25,8 @@ A data point is represented by an n-dimensional real vector:
 Point isn't parametrised, so we can't define a functor (or any functor-family)
 instances. Instead, we define a specialised map, `pmap`:
 
-> pmap :: (Double -> Double) -> Point -> Point
-> pmap f = Point . map f . point
+> pmap :: (Vector Double -> Vector Double) -> Point -> Point
+> pmap f = Point . f . point
 
 To define distance between data-points, we admit arbitrary metric spaces
 over real vectors; **However:** it should be noted that convergence is
@@ -80,7 +78,7 @@ of all points associated with the cluster:
 > toCluster :: Int -> PointSum -> Cluster
 > toCluster cid (PointSum count point) = Cluster
 >   { identifier = cid
->   , centroid   = pmap (// count) point
+>   , centroid   = map (//count) `pmap` point
 >   }
 >
 > (//) :: Double -> Int -> Double
@@ -89,34 +87,35 @@ of all points associated with the cluster:
 After each iteration, points are associated with the cluster having the nearest
 centroid:
 
-> closestCluster :: Metric a => (Vector Double -> a) -> [Cluster] -> Point -> Cluster
+> closestCluster :: Metric a => (Vector Double -> a) -> Vector Cluster -> Point -> Cluster
 > closestCluster (useMetric -> d) clusters point = fst . minimumBy (compare `on` snd) $ do
 >   cluster <- clusters
 >   return (cluster, point `d` centroid cluster)
 >
-> assign :: Metric a => (Vector Double -> a) -> [Cluster] -> [Point] -> Vector (Vector Point)
+> assign :: Metric a => (Vector Double -> a) -> Vector Cluster -> Vector Point -> Vector (Vector Point)
 > assign metric clusters points = let nc = length clusters in create $ do
->   vector <- MV.replicate nc empty
+>   vector <- MV.replicate (nc+1) empty
 >   points `forM_` \point -> do
->     let position = identifier $ closestCluster metric clusters point
+>     let cluster  = closestCluster metric clusters point
+>         position = identifier cluster
 >     points' <- MV.read vector position
->     MV.write vector position $! point `cons` points'
+>     MV.write vector position $ point `cons` points'
 >   return vector
 >
-> assignPS :: Metric a => (Vector Double -> a) -> [Cluster] -> [Point] -> Vector PointSum
+> assignPS :: Metric a => (Vector Double -> a) -> Vector Cluster -> Vector Point -> Vector PointSum
 > assignPS metric clusters points = reduce <$> assign metric clusters points
->   where reduce  = foldr (<>) (emptyPointSum length') . map (PointSum 1)
->         length' = V.length . point $ head points
+>   where reduce  = foldr (<>) (emptyPointSum length') . fmap (PointSum 1)
+>         length' = length . point $ head points
 >
-> makeNewClusters :: Vector PointSum -> [Cluster]
+> makeNewClusters :: Vector PointSum -> Vector Cluster
 > makeNewClusters vector = do
->   (pointSum@(PointSum count _), index) <- zip (toList vector) [0..]
+>   (pointSum@(PointSum count _), index) <- zip vector $ fromList [0..length vector]
 >   guard $ count > 0 -- We don't want an empty PointSum: amongst other 
 >                     -- things, this'd lead to division by zero when 
 >                     -- computing the centroid.
 >   return $ toCluster index pointSum
 >
-> step :: Metric a => (Vector Double -> a) -> [Cluster] -> [Point] -> [Cluster]
+> step :: Metric a => (Vector Double -> a) -> Vector Cluster -> Vector Point -> Vector Cluster
 > step = makeNewClusters ...: assignPS
 >
 
@@ -125,19 +124,19 @@ cluster, then reallocating points according to which centroid is closest, until
 convergence. As the algorithm isn't guaranteed to converge, we cut execution if
 convergence hasn't been observed after eighty iterations:
 
-> computeClusters :: Metric a => Int -> (Vector Double -> a) -> [Point] -> [Cluster] -> [Cluster]
+> computeClusters :: Metric a => Int -> (Vector Double -> a) -> Vector Point -> Vector Cluster -> Vector Cluster
 > computeClusters expectDivergent metric = computeClusters' expectDivergent metric 0 
 >
-> computeClusters' :: Metric a => Int -> (Vector Double -> a) -> Int -> [Point] -> [Cluster] -> [Cluster]
+> computeClusters' :: Metric a => Int -> (Vector Double -> a) -> Int -> Vector Point -> Vector Cluster -> Vector Cluster
 > computeClusters' expectDivergent metric iterations points clusters 
 >   | iterations >= expectDivergent = clusters
 >   | clusters' == clusters         = clusters 
 >   | otherwise                     = computeClusters' expectDivergent metric (succ iterations) points clusters'
 >   where clusters' = step metric clusters points
 >
-> kmeans :: Metric a => Int -> (Vector Double -> a) -> [Point] -> [Cluster] -> Vector (Vector Point)
+> kmeans :: Metric a => Int -> (Vector Double -> a) -> Vector Point -> Vector Cluster -> Vector (Vector Point)
 > kmeans expectDivergent metric points initial = assign metric clusters points
->   where clusters = computeClusters 80 metric points initial
+>   where clusters = computeClusters expectDivergent metric points initial
 
 A note on initialisation: typically clusters are randomly assigned to data
 points prior to the first update step.
