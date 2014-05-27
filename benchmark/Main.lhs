@@ -1,7 +1,8 @@
 We aim to benchmark each implementation of Lloyd's algorithm:
 
 > import Prelude hiding (take, zipWith)
-> import Algorithms.Lloyd.Sequential (Point(..), Cluster(..))
+> import Algorithms.Lloyd.Sequential (Point(..), Cluster(..), ExpectDivergent(..))
+> import Algorithms.Lloyd.Strategies (Partitions(..))
 > import qualified Algorithms.Lloyd.Sequential as Sequential (kmeans)
 > import qualified Algorithms.Lloyd.Strategies as Strategies (kmeans)
 > import Data.Metric (Metric(..), Euclidean(..))
@@ -35,6 +36,6 @@ Together the subject of our benchmarks:
  
 > main :: IO ()
 > main = defaultMain
->   [ bench "Sequential" $ nf (Sequential.kmeans 80 Euclidean points) clusters
->   , bench "Strategies" $ nf (Strategies.kmeans 80 Euclidean 64 points) clusters
->   ] 
+>   [ bench "Sequential" $ nf (Sequential.kmeans expectDivergent Euclidean points) clusters
+>   , bench "Strategies" $ nf (Strategies.kmeans expectDivergent Euclidean partitions points) clusters
+>   ] where (expectDivergent, partitions) = (ExpectDivergent 80, Partitions 64)

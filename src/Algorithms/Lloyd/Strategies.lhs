@@ -1,3 +1,5 @@
+> {-# LANGUAGE ViewPatterns #-}
+
 A parallel implementation of Lloyd's algorithm for k-means clustering,
 adapted from Marlow's _Parallel and Concurrent Programming in Haskell_.
 Here we use Evaluation Strategies to parallelise the assignment of
@@ -6,6 +8,8 @@ points to clusters:
 > module Algorithms.Lloyd.Strategies (
 >   Point(..),
 >   Cluster(..), 
+>   ExpectDivergent(..),
+>   Partitions(..),
 >   kmeans
 > ) where
 >
@@ -17,7 +21,7 @@ points to clusters:
 > import Data.Semigroup (Semigroup(..))
 > import Data.Vector (Vector(..), zipWith, map)
 > import Data.Vector.Split (chunksOf)
-> import Algorithms.Lloyd.Sequential (Cluster(..), Point(..), PointSum(..), makeNewClusters, assignPS, assign)
+> import Algorithms.Lloyd.Sequential (Cluster(..), Point(..), ExpectDivergent(..), PointSum(..), makeNewClusters, assignPS, assign)
 
 We can combine two vectors of some same type $t$ provided we know how to
 combine two $t$s:
@@ -43,8 +47,10 @@ recombination may exceed the speed-up provided by parallellism; if there
 are too few items, and those items vary in cost, some of our cores may
 be unused for part of the computation.
 
-> computeClusters :: Metric a => Int -> (Vector Double -> a) -> Int -> Vector Point -> Vector Cluster -> Vector Cluster
-> computeClusters expectDivergent metric = computeClusters' expectDivergent metric 0  ..: chunksOf
+> newtype Partitions = Partitions { partitions :: Int }
+>
+> computeClusters :: Metric a => ExpectDivergent -> (Vector Double -> a) -> Partitions -> Vector Point -> Vector Cluster -> Vector Cluster
+> computeClusters (expectDivergent -> expectDivergent) metric = computeClusters' expectDivergent metric 0  ..: chunksOf . partitions
 >
 > computeClusters' :: Metric a => Int -> (Vector Double -> a) -> Int -> Vector (Vector Point) -> Vector Cluster -> Vector Cluster
 > computeClusters' expectDivergent metric iterations points clusters 
@@ -53,6 +59,6 @@ be unused for part of the computation.
 >   | otherwise                     = computeClusters' expectDivergent metric (succ iterations) points clusters'
 >   where clusters' = step metric clusters points
 >
-> kmeans :: Metric a => Int -> (Vector Double -> a) -> Int -> Vector Point -> Vector Cluster -> Vector (Vector Point)
+> kmeans :: Metric a => ExpectDivergent -> (Vector Double -> a) -> Partitions -> Vector Point -> Vector Cluster -> Vector (Vector Point)
 > kmeans expectDivergent metric chunks points initial = assign metric clusters points
 >   where clusters = computeClusters expectDivergent metric chunks points initial

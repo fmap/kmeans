@@ -1,5 +1,5 @@
 name:                kmeans-par
-version:             1.4.2
+version:             1.5.0
 synopsis:            Sequential and parallel implementations of Lloyd's algorithm.
 license:             MIT
 license-file:        LICENSE

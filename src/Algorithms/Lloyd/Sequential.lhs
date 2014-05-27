@@ -6,6 +6,7 @@ adapted from Marlow's _Parallel and Concurrent Programming in Haskell_:
 > module Algorithms.Lloyd.Sequential (
 >   Point(..),
 >   Cluster(..), 
+>   ExpectDivergent(..),
 >   kmeans,
 >   PointSum(..),
 >   makeNewClusters,
@@ -132,8 +133,10 @@ cluster, then reallocating points according to which centroid is closest, until
 convergence. As the algorithm isn't guaranteed to converge, we cut execution if
 convergence hasn't been observed after eighty iterations:
 
-> computeClusters :: Metric a => Int -> (Vector Double -> a) -> Vector Point -> Vector Cluster -> Vector Cluster
-> computeClusters expectDivergent metric = computeClusters' expectDivergent metric 0 
+> newtype ExpectDivergent = ExpectDivergent { expectDivergent :: Int }
+>
+> computeClusters :: Metric a => ExpectDivergent -> (Vector Double -> a) -> Vector Point -> Vector Cluster -> Vector Cluster
+> computeClusters (expectDivergent -> expectDivergent) metric = computeClusters' expectDivergent metric 0 
 >
 > computeClusters' :: Metric a => Int -> (Vector Double -> a) -> Int -> Vector Point -> Vector Cluster -> Vector Cluster
 > computeClusters' expectDivergent metric iterations points clusters 
@@ -142,7 +145,7 @@ convergence hasn't been observed after eighty iterations:
 >   | otherwise                     = computeClusters' expectDivergent metric (succ iterations) points clusters'
 >   where clusters' = step metric clusters points
 >
-> kmeans :: Metric a => Int -> (Vector Double -> a) -> Vector Point -> Vector Cluster -> Vector (Vector Point)
+> kmeans :: Metric a => ExpectDivergent -> (Vector Double -> a) -> Vector Point -> Vector Cluster -> Vector (Vector Point)
 > kmeans expectDivergent metric points initial = assign metric clusters points
 >   where clusters = computeClusters expectDivergent metric points initial
 
