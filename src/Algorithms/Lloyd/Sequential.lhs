@@ -11,7 +11,8 @@ adapted from Marlow's _Parallel and Concurrent Programming in Haskell_:
 >   PointSum(..),
 >   makeNewClusters,
 >   assign,
->   assignPS
+>   assignPS,
+>   step
 > )where
 > 
 > import Prelude hiding (zipWith, map, foldr, replicate, length, zip, head)
@@ -131,7 +132,7 @@ centroid:
 The algorithm consists of iteratively finding the centroid of each existing
 cluster, then reallocating points according to which centroid is closest, until
 convergence. As the algorithm isn't guaranteed to converge, we cut execution if
-convergence hasn't been observed after eighty iterations:
+convergence hasn't been observed some provided number of iterations:
 
 > newtype ExpectDivergent = ExpectDivergent { expectDivergent :: Int }
 >

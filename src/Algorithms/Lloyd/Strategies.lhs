@@ -10,7 +10,8 @@ points to clusters:
 >   Cluster(..), 
 >   ExpectDivergent(..),
 >   Partitions(..),
->   kmeans
+>   kmeans,
+>   step
 > ) where
 >
 > import Prelude hiding (zipWith, foldr1, map)
