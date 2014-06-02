@@ -103,8 +103,8 @@ centroid:
 >   return (cluster, point `d` centroid cluster)
 >
 > assign :: Metric a => (Vector Double -> a) -> Vector Cluster -> Vector Point -> Vector (Vector Point)
-> assign metric clusters points = let nc = length clusters in create $ do
->   vector <- MV.replicate nc empty
+> assign metric clusters points = create $ do
+>   vector <- MV.replicate (length clusters) empty
 >   points `forM_` \point -> do
 >     let cluster  = closestCluster metric clusters point
 >         position = identifier cluster
@@ -119,15 +119,11 @@ centroid:
 >
 > makeNewClusters :: Vector PointSum -> Vector Cluster
 > makeNewClusters vector = do
->   (pointSum@(PointSum count _), index) <- zip vector $ fromList [0..length vector]
->   guard $ count > 0 -- We don't want an empty PointSum: amongst other 
->                     -- things, this'd lead to division by zero when 
->                     -- computing the centroid.
+>   (pointSum, index) <- zip vector $ fromList [0..length vector]
 >   return $ toCluster index pointSum
 >
 > step :: Metric a => (Vector Double -> a) -> Vector Cluster -> Vector Point -> Vector Cluster
 > step = makeNewClusters ...: assignPS
->
 
 The algorithm consists of iteratively finding the centroid of each existing
 cluster, then reallocating points according to which centroid is closest, until
